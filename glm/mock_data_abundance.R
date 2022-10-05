@@ -1,5 +1,6 @@
 ###################
 # mock arapima data
+# authored by George Brooks, October 2022
 ###################
 
 # libraries
