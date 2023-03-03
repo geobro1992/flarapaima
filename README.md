@@ -1,4 +1,4 @@
-# Bayesian socio-ecological models of fisheries 
+# Socio-ecological models of fisheries
 
 ### SOCIAL-ECOLOGICAL SYSTEMS
 Ostrom's (2009) SES (social-ecological system) multi-scalar framework is a framework that seeks to integrate social and ecological systems across multiple scales to improve resource governance and management. The framework emphasizes the importance of understanding the interconnections between social and ecological systems, and how these interconnections shape resource governance and management.
@@ -22,3 +22,14 @@ A state-space model that combines the elements of the SES multi-scalar framework
 The model could be designed to capture the interactions between social and ecological factors across multiple scales, such as the local, regional, and national scales. This would involve developing sub-models for each scale that capture the relevant social and ecological components of the system. These sub-models would then be linked together to capture the feedbacks and interactions between the scales.
 
 The state-space model could be used to explore different scenarios and management strategies for the system. For example, the model could be used to evaluate the impact of different fishing regulations on fish populations and fishing communities, and to identify optimal management strategies that balance conservation objectives with the social and economic needs of fishing communities.
+
+
+### MODELLING OPTIONS
+
+_Generalized Linear Models_
+
+_Spatially-Explicit Occupancy Models_
+
+_Dynamic N-mixture Models_
+
+_Predator-Prey Models_
