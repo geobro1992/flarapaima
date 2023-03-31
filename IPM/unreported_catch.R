@@ -7,22 +7,64 @@
 
 library(jagsUI)
 
-######
-# Data
-######
+######################
+# simulated count data
+######################
 
-# make fake catch data
-catch = matrix(c(rep(0,20), 
-                 sample(4:6, size = 10, replace = T),
-                 sample(3:5, size = 10, replace = T),
-                 sample(1:3, size = 10, replace = T),
-                 sample(0:3, size = 10, replace = T),
-                 sample(0:2, size = 10, replace = T),
-                 sample(0:2, size = 10, replace = T)), 
-               ncol = 10, byrow = T)
+n.sites = 100 # scalar, number of habitat patches
+n.years = 10 # scalar, number of years
+#nreps = 3 # scalar, number of surveys within a primary sampling period (needed to estimate observation error)
+#adj =  matrix(c(rep(rep(c(0,0), 15), 15), rep(rep(c(1,0), 15), 15)), nrow = nsite) # a matrix[nsite, nsite] describing the adjacency among habitat patches
+#nadj = c(rep(1, 15), rep(14, 15)) # a vector[nsite] containing the number of adjacent patches for each patch
 
-colnames(catch) = 2011:2020  # years
-rownames(catch) = 1:8        # age of fish
+N.A = array(dim = c(n.sites, n.years)) # an array[snite, nyear, nreps] containing the true counts of adults
+N.J = array(dim = c(n.sites, n.years)) # an array[snite, nyear, nreps] containing the true counts of juveniles
+SA = array(dim = c(n.sites, n.years)) # an array[snite, nyear, nreps] containing the surviving adults from previous year
+SJ = array(dim = c(n.sites, n.years)) # an array[snite, nyear, nreps] containing the surviving juveniles from previous year
+H = array(dim = c(n.sites, n.years)) # an array[snite, nyear, nreps] containing the number of fished animals
+R = array(dim = c(n.sites, n.years)) # an array[snite, nyear, nreps] containing the number of new recruits
+M = array(dim = c(n.sites, n.years)) # an array[snite, nyear, nreps] containing the number of juveniles that mature
+
+lambda0_a = 100       # mean number of adults in year 1 
+lambda0_j = 100       # mean number of juveniles in year 1
+phi.a = 0.9           # adult survival
+phi.j = 0.3           # juvenile survival
+fec = 2.5             # fecundity
+p.mat = 0.25          # probability of maturity
+h = 0.1                     # total fishing pressure
+
+
+for(s in 1:n.sites){
+  
+    N.A[s,1] = rpois(1, lambda0_a)
+    N.J[s,1] = rpois(1, lambda0_j)
+    
+   for(t in 2:n.years){
+      
+      SA[s,t-1] = N.A[s,t-1] * phi.a 
+      H[s,t-1] = as.integer(N.A[s,t-1] * h)
+      SJ[s,t-1] = N.J[s,t-1] * phi.j
+      
+      R[s,t-1] = rpois(1, (fec*N.A[s,t-1]))  # this is where we can have density dependent recruitment
+      M[s,t-1] = SJ[s,t-1] * p.mat
+      
+      N.A[s,t] = as.integer((SA[s,t-1] + M[s,t-1] - H[s,t-1]))
+      N.J[s,t] = as.integer((SJ[s,t-1] + R[s,t-1] - M[s,t-1]))
+
+   }
+}
+
+# simulate observation error of counts (but to accurately estimate, you need repeated counts within a year)
+e = 0.1                                          # observation error in counts
+yA = round(rnorm(length(N.A),0,N.A*e) + N.A)     # observed counts of adults
+yJ = round(rnorm(length(N.J),0,N.J*e) + N.J)     # observed counts of juveniles
+
+# simulate observation error of catch (but to accurately estimate, you need surveys that tell you compliance vs abundance)
+C = array(dim = c(n.sites, n.years, 3)) # an array[snite, nyear, nscenarios] to hold observed catch (true catch - unreported catch)
+C[,,1] = H                           # observed catch with no unreported fishing
+C[,,2] = round(H * (1 - 0.2))               # observed catch with constant unreported fishing (r = 0.2)
+C[,,3] = round(H * (1 - N.A/max(N.A, na.rm = T)))  # observed catch with dynamic unreported fishing (r = (h/N.A)/(max(h/N.A)))
+
 
 # make fake survey data (to estimate rate of illegal fishing)
 surveys = matrix(c(sample(40:80, size = 10, replace = T),
@@ -34,116 +76,139 @@ rownames(surveys) = c("Fishers surveyes", "Registered catch") # number of fisher
 
 
 # make fake telemetry data (to help separate natural mortlaity and fishing mortality)
-telemetry = matrix(c(sample(0:2, size = 10, replace = T),
-                     sample(0:2, size = 10, replace = T),
-                     sample(20:25, size = 10, replace = T)),
+telemetry = matrix(c(sample(2:3, size = 10, replace = T),
+                     sample(2:3, size = 10, replace = T),
+                     sample(20:30, size = 10, replace = T)),
                    ncol = 10, byrow = T)
 
 colnames(telemetry) = 2011:2020
 rownames(telemetry) = c("fished", "died naturally", "survived")
 
-##########################################
-# combine all 3 sources of data into a list
-flounder = list(C = catch, H = surveys, R = telemetry)
+
+
+#Bundle data and produce overview 
+jags.data <- list(yA = yA, yJ = yJ,                             # counts of adults and juveniles
+                  p.mat = p.mat,                                # probability of maturity (might be possible to estimate)
+                  C=C,                                          # catch data
+                  a=surveys[1,], b=surveys[2,],                 # survey data
+                  R=telemetry, n.tracked=colSums(telemetry),    # telemetry data 
+                  n.years=ncol(yA), n.sites = nrow(yA))         # number of years and sites
+
+
+#
+# plot expected vs observed catch  
+#
+
+op <- par(cex.main = 1.5, mar = c(5, 6, 4, 5) + 0.1, mgp = c(3.5, 1, 0), cex.lab = 1.5 , font.lab = 2, cex.axis = 1.3, bty = "n", las = 1)
+
+plot(H[1:10,], jitter(C[1:10,,1], amount = 0.3), pch = 16, cex = 0.7, ylim = c(3,12), ylab = "", xlab = "", axes = FALSE)
+axis(1)
+axis(2) 
+abline(a=0, b=1, lwd = 2)
+points(H[1:10,], jitter(C[1:10,,2], amount = 0.3), pch = 4, cex = 0.7)
+points(H[1:10,], jitter(C[1:10,,3], amount = 0.3), pch = 2, cex = 0.7)
+
+par(las = 0)
+mtext("True Catch", side = 1, line = 2.5, cex = 1.5)
+mtext("Reported Catch", side = 2, line = 3.7, cex = 1.5)
+
+points(5.5, 12, pch = 16, cex = 1.5)
+text(5.7, 12, "r = 0", cex = 1.2, font = 1, adj = 0)
+points(5.5, 11, pch = 4, lwd = 2, cex = 1.5)
+text(5.7, 11, "r = 0.2", cex = 1.2, font = 1, adj = 0)
+points(5.5, 10, pch = 2, lwd = 2, cex = 1.5)
+text(5.7, 10, "r ~ N", cex = 1.2, font = 1, adj = 0)
 
 
 ###################
 # demographic model
 ###################
 
-#estimate of survival  
-#M = c(1.341, 0.585, 0.441, 0.386, 0.359, 0.344, 0.336) # real data for flounder (need to modify model to be age-dependent survival)
-#s= 1-exp(-M)
-s = 0.4           # survival rate
-a.mat = 2         # age at maturity
-a.max = 8         # lifespan
-
-# fecundity (need to modify model to be age-dependent fecundity)
-f= 0.25 
-
-# matrix population model (transition matrix a)
-A= matrix(0, ncol=a.max, nrow=a.max) # flounder age cap at 8 w/ one year age classes
-
-A[1,a.mat:a.max] <- f
-
-for(a in 2:a.max){
-  A[a,a-1] <- s
-}
-
-#compute stable age distribution (right eigenvector of A)
-z= which.max(Re(eigen(A)$values))
-revec= Re(eigen(A)$vectors[,z])
-
-
-#Population size in first age class of first year 
-N1= 200
-#compute age specific population sizes in first year
-n= N1 * revec / revec[1]
-
-#Bundle data and produce overview 
-jags.data <- with(flounder, list(C=C, a=H[1,], b=H[2,], R=R, total=colSums(R), n.years=ncol(C),
-                            a.max=a.max, a.mat = a.mat, n=n))
-
-#write JAGS model file
+#write JAGS model file with survey data / unreported catch
 cat(file="model1.txt", " 
 model {
-#priors and linear models
-for (t in 1: (n.years-1)) {
-  f[t] ~ dunif(0,1)      # fecundity
-}
-for (t in 1:n.years) {
-  s[t] ~ dunif(0,1)      # survival
-  h[t] ~ dunif(0,1)      # hunting mortality
-  r[t] ~ dunif(0,1)      # proportion of legal fishing
+
+#priors
+lambda0.a ~ dgamma(0.01, 0.01)  # initial pop size of adults
+lambda0.j ~ dgamma(0.01, 0.01)  # initial pop size of juveniles
+phi.j ~ dunif(0, 1)             # natural juvenile mortality
+phi.a ~ dunif(0, 1)             # natural adult mortality  
+gamma ~ dgamma(1, 1)      # recruitment 
+h ~ dunif(0,1)                  # fishing mortality
+e ~ dgamma(1, 1)
+
+for(s in 1:n.sites) {
+ for (t in 1:n.years) {
+   r[s,t] ~ dunif(0,1)      # proportion of legal fishing
+ }
 }
 
-#age at harvest data (state space model)
 #model for the initial population size: poisson priors
-for (a in 1:a.max) {
-  N[a,1] ~ dpois(n[a])
-}
-
-#Process model over time: our model of population dynamics
-for (t in 1: (n.years-1)) {
-N[1, t+1] ~ dpois((Ntot[t] - sum(N[1:(a.mat-1),t])) * f[t])
-
-for (a in a.mat:a.max){
-   N[a, t+1] ~ dbin( (1-h[t]) * s[t], N[a-1,t])
- } #a
-} #t
-
-#derived quantity: total year-specific population size 
-for (t in 1:n.years){
-  Ntot[t] <- sum(N[,t])
-}
+for(s in 1:nsite) {
+    
+    N.A[s,1] ~ dpois(lambda0.a)
+    N.J[s,1] ~ dpois(lambda0.j)
+    
+ for(t in 2:nyear) {
+      
+      SA[s,t-1]~dbin((1-h) * phi.a, N.A[s,t-1])
+      SJ[s,t-1]~dbin(phi.j, N.J[s,t-1])
+      
+      REC[s,t-1] ~ dpois(gamma * N.A[s,t-1])
+      M[s,t-1] ~ dbin(p.mat, SJ[s,t-1])
+      
+      N.A[s,t] <- SA[s,t-1] + M[s,t-1]                # +I[i,t-1]-E[i,t-1]
+      N.J[s,t] <- SJ[s,t-1] + (REC[i,t-1]) - M[s,t-1]   # +I[i,t-1]-E[i,t-1]
+      
+  } # t
+    
+} # s
 
 #observation model 
 for (t in 1:n.years){
-  for (a in a.mat:a.max){
-    C[a,t] ~ dbin(h[t] * r[t], N[a,t])
+  for (s in 1:n.sites){
+    C[s,t] ~ dbin(h * r[s,t], N.A[s,t])
   } #a
 } #t
+
 #hunter survey data (logistic regression)
 for (t in 1:n.years) {
-  b[t] ~ dbin(r[t], a[t])
+  for (s in 1:n.sites){
+   b[s,t] ~ dbin(r[s,t], a[s,t])
+  }
 }
+
 #radio tracking data (multinomial)
-for (t in 1:n.years) {
-  R[,t] ~ dmulti(prt[,t], total[t])
-  prt[1,t] <- h[t]
-  prt[2,t] <- (1-h[t]) * (1-s[t])
-  prt[3,t] <- (1-h[t]) * s[t]
-}
-}
+  R[,t] ~ dmulti(prt, n.tracked)
+  prt[1] <- h
+  prt[2] <- (1-h) * (1-phi.a)
+  prt[3] <- (1-h) * phi.a
+
+# observation model
+  
+  for (s in 1:nsite) {
+    
+    for (t in 1:nyear) {
+      
+        yA[s,t] ~ dnorm(N.A[s,t], 1/(pow(e*N.A[s,t],2)))
+        yJ[s,t] ~ dnorm(N.J[s,t], 1/(pow(e*N.J[s,t],2))) 
+
+    } # t
+    
+  } # s
+  
+}  
 ")
 
 #Initial values 
-inits <- function() {list(s= runif(jags.data$n.years, 0.75, 0.85),  # guess of survival
-                          h= runif(jags.data$n.years, 0.05, 0.15),  # guess of fishing mortality
-                          r= runif(jags.data$n.years, 0.45, 0.55))} # guess of reporting rate (proportion of legal fishing)
+inits <- function() {list(h = runif(jags.data$n.years, 0.05, 0.15),  # guess of fishing mortality
+                          r = runif(jags.data$n.years, 0.45, 0.55),  # guess of reporting rate (proportion of legal fishing)
+                          lambda0.a = 100, lambda0.j = 100,          # guess of mean pop size
+                          phi.a = 0.8, phi.j = 0.3,                  # guess of natural mortality
+                          gamma = 1)}                                # guess of recruitment
 
 #parameters monitored
-parameters <- c("s", "h", "f", "r", "Ntot")
+parameters <- c("phi.a", "phi.j", "h", "r", "lambda0.a", "lambda0.j", "gamma")
 
 #MCMC settings
 ni <- 250000; nb <- 50000; nc <- 3; nt <-200; na <- 5000
@@ -157,3 +222,103 @@ traceplot(out1)
 mean(out1$sims.list$r)
 mean(out1$sims.list$s)
 mean(out1$sims.list$h)
+
+
+#####################################
+# JAGS model file WITHOUT survey data
+
+cat(file="model2.txt", " 
+model {
+
+#priors
+lambda0.a ~ dgamma(0.01, 0.01)    # initial pop size of adults
+lambda0.j ~ dgamma(0.01, 0.01)    # initial pop size of juveniles
+phi.j ~ dunif(0, 0.5)             # natural juvenile mortality
+phi.a ~ dunif(0.5, 1)             # natural adult mortality  
+gamma ~ dgamma(1, 1)              # recruitment 
+h ~ dunif(0,0.2)                  # fishing mortality
+e ~ dgamma(1, 1)
+
+#model for the initial population size: poisson priors
+for(s in 1:n.sites) {
+    
+    N.A[s,1] ~ dpois(lambda0.a)
+    N.J[s,1] ~ dpois(lambda0.j)
+    
+ for(t in 2:n.years) {
+      
+      SA[s,t-1]~dbin((1-h) * phi.a, N.A[s,t-1])
+      SJ[s,t-1]~dbin(phi.j, N.J[s,t-1])
+      
+      REC[s,t-1] ~ dpois(gamma * N.A[s,t-1])
+      M[s,t-1] ~ dbin(p.mat, SJ[s,t-1])
+      
+      N.A[s,t] <- SA[s,t-1] + M[s,t-1]                # +I[i,t-1]-E[i,t-1]
+      N.J[s,t] <- SJ[s,t-1] + (REC[s,t-1]) - M[s,t-1]   # +I[i,t-1]-E[i,t-1]
+      
+  } # t
+    
+} # s
+
+#observation model 
+for (t in 1:n.years){
+  for (s in 1:n.sites){
+    C[s,t,3] ~ dbin(h, N.A[s,t])
+  } #a
+} #t
+
+#radio tracking data (multinomial)
+for (t in 1:n.years) {
+  R[,t] ~ dmulti(prt[,t], n.tracked[t])
+  prt[1,t] <- h
+  prt[2,t] <- (1-h) * (1-phi.a)
+  prt[3,t] <- (1-h) * phi.a
+}
+
+# observation model
+  
+  for (s in 1:n.sites) {
+    
+    for (t in 1:n.years) {
+      
+        yA[s,t] ~ dnorm(N.A[s,t], 1/pow(e*N.A[s,t],2))
+        yJ[s,t] ~ dnorm(N.J[s,t], 1/pow(e*N.J[s,t],2)) 
+
+    } # t
+    
+  } # s
+  
+}  
+")
+
+#Initial values 
+inits <- function() {list(h = 0.07,  # guess of fishing mortality
+                          lambda0.a = 100, lambda0.j = 100,          # guess of mean pop size
+                          phi.a = 0.9, phi.j = 0.3,                  # guess of natural mortality
+                          gamma = 2.5,
+                          e = 0.1)}                                # guess of recruitment
+
+#parameters monitored
+parameters <- c("phi.a", "phi.j", 
+                "lambda0.a", "lambda0.j",
+                "h", "gamma",
+                "e",
+                "N.A", "N.J")
+
+#MCMC settings
+ni <- 30000; nb <- 5000; nc <- 3; nt <-200; na <- 5000
+
+#call JAGS from R
+out1= jags(data = jags.data, inits = inits, parameters.to.save = parameters, model.file = "model2.txt", 
+           n.iter=ni, n.burnin = nb, n.chains= nc,
+           n.thin= nt, n.adapt = na, parallel = TRUE)
+
+traceplot(out1)
+mean(out1$sims.list$phi.j)
+mean(out1$sims.list$phi.a)
+mean(out1$sims.list$gamma)
+mean(out1$sims.list$h)
+mean(out1$sims.list$e)
+
+save(out1, file = "no_survey_C3.RData")
+load("no_survey_C1.RData")
