@@ -12,7 +12,7 @@ library(jagsUI)
 ######################
 
 n.sites = 100 # scalar, number of habitat patches
-n.years = 10 # scalar, number of years
+n.years = 30 # scalar, number of years
 #nreps = 3 # scalar, number of surveys within a primary sampling period (needed to estimate observation error)
 #adj =  matrix(c(rep(rep(c(0,0), 15), 15), rep(rep(c(1,0), 15), 15)), nrow = nsite) # a matrix[nsite, nsite] describing the adjacency among habitat patches
 #nadj = c(rep(1, 15), rep(14, 15)) # a vector[nsite] containing the number of adjacent patches for each patch
@@ -26,35 +26,55 @@ H = array(dim = c(n.sites, n.years)) # an array[snite, nyear, nreps] containing 
 R = array(dim = c(n.sites, n.years)) # an array[snite, nyear, nreps] containing the number of new recruits
 M = array(dim = c(n.sites, n.years)) # an array[snite, nyear, nreps] containing the number of juveniles that mature
 
-lambda0_a = 100       # mean number of adults in year 1 
-lambda0_j = 100       # mean number of juveniles in year 1
-phi.a = 0.9           # adult survival
-phi.j = 0.3           # juvenile survival
-fec = 2.5             # fecundity
-p.mat = 0.25          # probability of maturity
-h = 0.1               # total fishing pressure
+lambda0_a = 500       # mean number of adults in year 1 
+lambda0_j = 500       # mean number of juveniles in year 1
+phi.a = 0.6           # adult survival
+phi.j = 0.6           # juvenile survival
+p.mat = 0.2           # probability of maturity
+h = 0.2               # legal fishing pressure
+ih = 55               # unreported catch 
 
+#assuming Beverton Holt recruitment, these are general parameters I adjusted by eye
+# increase beta to reduce carrying capacity (stochastic beta)
+alpha = 400 
+beta = 10
+#adults = seq(0, 400, by = 25)
+#R = (alpha*adults)/(beta+adults)
+#plot(adults, R)
+              
 # create simulated data
 for(s in 1:n.sites){
   
+  # year 1
   N.A[s,1] = rpois(1, lambda0_a) # if pop sizes across sites are overdispersed, can't use poisson
   N.J[s,1] = rpois(1, lambda0_j)
   
-  for(t in 2:n.years){
+  # year 2
+  SA[s,1] = N.A[s,1] * phi.a 
+  SJ[s,1] = N.J[s,1] * phi.j
+  
+  M[s,1] = SJ[s,1] * p.mat
+  
+  N.A[s,2] = as.integer((SA[s,1] + M[s,1]))
+  N.J[s,2] = as.integer((SJ[s,1] - M[s,1]))
+  
+  for(t in 3:n.years){
     
     SA[s,t-1] = N.A[s,t-1] * phi.a 
-    H[s,t-1] = as.integer(N.A[s,t-1] * h)
-    SJ[s,t-1] = N.J[s,t-1] * phi.j
+    H[s,t-1] = as.integer((N.A[s,t-1] * h) + ih)
+    SJ[s,t-1] = N.J[s,t-1] * max(runif(1, phi.j-0.1, phi.j+0.1),0)  # improve stochastic functions
     
-    R[s,t-1] = rpois(1, (fec*N.A[s,t-1]))  # this is where we can have density dependent recruitment
+    R[s,t-2] = (alpha*N.A[s,t-2])/(beta+N.A[s,t-2])
     M[s,t-1] = SJ[s,t-1] * p.mat
     
-    N.A[s,t] = as.integer((SA[s,t-1] + M[s,t-1] - H[s,t-1]))
-    N.J[s,t] = as.integer((SJ[s,t-1] + R[s,t-1] - M[s,t-1]))
+    N.A[s,t] = max(as.integer((SA[s,t-1] + M[s,t-1] - H[s,t-1])),0)
+    N.J[s,t] = max(as.integer((SJ[s,t-1] + R[s,t-2] - M[s,t-1])),0)
     
   }
 }
 
+plot(colSums(N.A[,-c(1:5)])/100, type = "l", ylim = c(0,50))
+aggregate(N.A[,-c(1:5)], 2, FUN = quantile)
 # simulate observation error of counts (but to accurately estimate, you need repeated counts within a year)
 e = 0.1                                          # observation error in counts
 yA = round(rnorm(length(N.A),0,N.A*e) + N.A)     # observed counts of adults
@@ -94,7 +114,8 @@ jags.data <- list(yA = yA, yJ = yJ,                             # counts of adul
                   p.mat = p.mat,                                # probability of maturity (might be possible to estimate)
                   C=C,                                          # catch data
                   a=surveys[1,], b=surveys[2,],                 # survey data
-                  n.years=ncol(yA), n.sites = nrow(yA))         # number of years and sites
+                  n.years=ncol(yA), n.sites = nrow(yA),         # number of years and sites
+                  alpha = 400, beta = 10)                       # BH parameters 
 
 
 #
@@ -131,7 +152,6 @@ cat(file="model2.txt", "
     lambda0.j ~ dgamma(0.01, 0.01)    # initial pop size of juveniles
     phi.j ~ dunif(0, 0.5)             # natural juvenile mortality
     phi.a ~ dunif(0.5, 1)             # natural adult mortality  
-    gamma ~ dgamma(1, 1)              # recruitment 
     h ~ dunif(0,0.2)                  # fishing mortality
     e ~ dgamma(1, 1)
 
@@ -146,7 +166,7 @@ cat(file="model2.txt", "
     SA[s,t-1]~dbin((1-h) * phi.a, N.A[s,t-1])
     SJ[s,t-1]~dbin(phi.j, N.J[s,t-1])
     
-    REC[s,t-1] ~ dpois(gamma * N.A[s,t-1])
+    REC[s,t-1] ~ dpois(gamma * N.A[s,t-1]) # change this to BH recruitment
     M[s,t-1] ~ dbin(p.mat, SJ[s,t-1])
     
     N.A[s,t] <- SA[s,t-1] + M[s,t-1]                  ### +I[i,t-1]-E[i,t-1] (immigration and emmigration)
