@@ -18,6 +18,6 @@ The governance systems component of the SES multi-scalar framework can be couple
 
 
 ### Contents
-**Scenario 1** - illegal harvest is proportional to fish abundance and fishing pressure is unknown. The scripts to run and evaluate models are provided in the "IPM/ih_prop" folder.
-**Scenario 2** - illegal harvest is proportional to fish abundance and fishing pressure is known. The scripts to run and evaluate models are provided in the "IPM/multinomial" folder. 
-**Scenario 3** - illegal harvest is unrelated to fish abundance and fishing pressure in unknown. The scripts to run and evaluate models are provided in the "IPM/ih_constant" folder.
+**Scenario 1** - illegal harvest is proportional to fish abundance and fishing pressure is unknown. The scripts to run and evaluate models are provided in the "_IPM/ih_proportional_" folder.\
+**Scenario 2** - illegal harvest is proportional to fish abundance and fishing pressure is known. The scripts to run and evaluate models are provided in the "_IPM/multinomial_" folder.\
+**Scenario 3** - illegal harvest is unrelated to fish abundance and fishing pressure in unknown. The scripts to run and evaluate models are provided in the "_IPM/ih_constant_" folder.
