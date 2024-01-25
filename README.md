@@ -24,6 +24,7 @@ We explore three scenarios for fisheries that experience unreported harvest, eac
 **Scenario 2** - illegal harvest is proportional to fish abundance and fishing pressure is known. The scripts to run and evaluate models are provided in the "_IPM/multinomial_" folder.\
 **Scenario 3** - illegal harvest is unrelated to fish abundance and fishing pressure in unknown. The scripts to run and evaluate models are provided in the "_IPM/ih_constant_" folder.
 
+
 ![Conceptual Flow Chart](chans_conceptual_fig.png)
 
-Figure 1: Decision tree for selecting a fisheries model. Choices are made based on the relationship between unreported harvest and fish abundance, the availability of data to precisely estimate legal fishing, and the ability of social information to estimate levels of rule compliance."
+_Figure 1: Decision tree for selecting a fisheries model. Choices are made based on the relationship between unreported harvest and fish abundance, the availability of data to precisely estimate legal fishing, and the ability of social information to estimate levels of rule compliance._
