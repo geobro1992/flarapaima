@@ -16,20 +16,8 @@ The resource units component of the SES multi-scalar framework can be coupled wi
 
 The governance systems component of the SES multi-scalar framework can be coupled with population dynamics theory by focusing on the institutional arrangements and decision-making processes that shape resource management. For example, understanding how fishing regulations and policies are developed, enforced, and modified over time can help to inform more effective governance strategies that promote sustainable fishing practices and healthy fish populations.
 
-### STATE-SPACE MODELS
-A state-space model that combines the elements of the SES multi-scalar framework and population dynamics theory would involve the creation of a dynamic model that incorporates both social and ecological factors to simulate the interactions and feedbacks between these components over time. The model would be represented by a set of equations that describe the state of the system, including the ecological state (e.g. population size, growth rate, carrying capacity) and the social state (e.g. fishing effort, economic incentives, policy regulations).
 
-The model could be designed to capture the interactions between social and ecological factors across multiple scales, such as the local, regional, and national scales. This would involve developing sub-models for each scale that capture the relevant social and ecological components of the system. These sub-models would then be linked together to capture the feedbacks and interactions between the scales.
-
-The state-space model could be used to explore different scenarios and management strategies for the system. For example, the model could be used to evaluate the impact of different fishing regulations on fish populations and fishing communities, and to identify optimal management strategies that balance conservation objectives with the social and economic needs of fishing communities.
-
-
-### MODELLING OPTIONS
-
-_Generalized Linear Models_
-
-_Spatially-Explicit Occupancy Models_
-
-_Dynamic N-mixture Models_
-
-_Predator-Prey Models_
+### Contents
+**Scenario 1** - illegal harvest is proportional to fish abundance and fishing pressure is unknown. The scripts to run and evaluate models are provided in the "IPM/ih_prop" folder.
+**Scenario 2** - illegal harvest is proportional to fish abundance and fishing pressure is known. The scripts to run and evaluate models are provided in the "IPM/multinomial" folder. 
+**Scenario 3** - illegal harvest is unrelated to fish abundance and fishing pressure in unknown. The scripts to run and evaluate models are provided in the "IPM/ih_constant" folder.
